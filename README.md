@@ -1,3 +1,3 @@
-# Simple Python RESTful API
+# Simple Python gRPC API
 
-This is a basic REST python API that serves book data from a MySQL database.
+This is a basic gRPC python API that serves fake book data from a MySQL database.
