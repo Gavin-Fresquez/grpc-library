@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+enum IDType {
+  IDTYPE_UUID = 0;
+  IDTYPE_ISBN = 1;
+}
+
+enum ErrorCode {
+  ERR_CODE_BAD_REQUEST = 0;
+  ERR_CODE_NOT_FOUND = 1;
+  ERR_CODE_INTERNAL_MALFUNCTION = 2;
+}
+
+message Error {
+  string message = 1;
+  uint32 code = 2;
+}
+
+message Book {
+  string uuid = 1;
+  string title = 2;
+  string author = 3;
+  string description = 4;
+  uint64 isbn_number = 5;
+  bool checked_out = 6;
+}
+
+message UpsertBookRequest {
+  Book book = 1;
+}
+
+message UpsertBookResponse {
+  oneof uuid_or_err {
+    string uuid = 1;
+    Error err = 2;
+  }
+}
+
+message ListBooksRequest {
+  uint32 limit = 1;
+}
+
+message ListBooksResponse {
+  // cannot use repeated in oneof so check for books has to be done manually
+  repeated Book books = 1;
+  Error err = 2;
+}
+
+message GetBookRequest {
+  oneof uuid_or_isbn {
+    string uuid = 1;
+    uint64 isbn_number = 2;
+  }
+  IDType id_type = 3;
+}
+
+message GetBookResponse {
+  oneof book_or_err {
+    Book book = 1;
+    Error err = 2;
+  }
+}
+
+service Library {
+  rpc CreateBook (UpsertBookRequest) returns (UpsertBookResponse);
+  rpc UpdateBook (UpsertBookRequest) returns (UpsertBookResponse);
+  rpc ListBooks (ListBooksRequest) returns (ListBooksResponse);
+  rpc GetBook (GetBookRequest) returns (GetBookResponse);
+  rpc DeleteBook (GetBookRequest) returns (UpsertBookResponse);
+
+  // Only need uuid/isbn and will only return uuid/isbn
+  rpc CheckoutBook (GetBookRequest) returns (UpsertBookResponse);
+  rpc ReturnBook (GetBookRequest) returns (UpsertBookResponse);
+}
+
