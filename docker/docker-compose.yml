@@ -6,32 +6,35 @@ services:
     image: mysql:8.0
     container_name: library_mysql
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: books
-      MYSQL_USER: library_user
-      MYSQL_PASSWORD: library_password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./migrations:/docker-entrypoint-initdb.d
     networks:
       - library_network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       timeout: 20s
       retries: 10
+      interval: 10s
+      start_period: 30s
+    restart: unless-stopped
 
   # MongoDB Database
   mongodb:
     image: mongo:7.0
     container_name: library_mongodb
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: rootpassword
-      MONGO_INITDB_DATABASE: library_db
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
     ports:
-      - "27017:27017"
+      - "${MONGO_PORT:-27017}:27017"
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -40,30 +43,35 @@ services:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       timeout: 20s
       retries: 10
+      interval: 10s
+      start_period: 30s
+    restart: unless-stopped
 
   # gRPC Library Service
   library-service:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Docker/Dockerfile
       target: development
     container_name: library_grpc_service
     environment:
       # MySQL Configuration
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
-      MYSQL_USER: library_user
-      MYSQL_PASSWORD: library_password
-      MYSQL_DATABASE: books
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
       
       # MongoDB Configuration
-      MONGODB_URI: mongodb://root:rootpassword@mongodb:27017/library_db?authSource=admin
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/${MONGO_DATABASE}?authSource=admin
       
       # Application Configuration
       PYTHONPATH: /app
+      GRPC_PORT: ${GRPC_PORT:-50051}
+      DEBUG_PORT: ${DEBUG_PORT:-50052}
     ports:
-      - "50051:50051"  # gRPC port
-      - "50052:50052"  # Debug port
+      - "${GRPC_PORT:-50051}:50051"  # gRPC port
+      - "${DEBUG_PORT:-50052}:50052"  # Debug port
     volumes:
       - .:/app
       - /app/protogen  # Exclude protogen from volume mount
@@ -74,20 +82,23 @@ services:
         condition: service_healthy
     networks:
       - library_network
+    restart: unless-stopped
     command: >
       bash -c "
         echo 'Waiting for databases to be ready...' &&
         sleep 15 &&
         echo 'Testing database connections...' &&
         python repository/database.py &&
-        python test_mongodb_connection.py &&
+        python test/test_mongodb_connection.py &&
         echo 'Starting gRPC server...' &&
         python main.py
       "
 
 volumes:
   mysql_data:
+    driver: local
   mongodb_data:
+    driver: local
 
 networks:
   library_network:
