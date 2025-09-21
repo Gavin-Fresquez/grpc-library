@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: library_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: books
+      MYSQL_USER: library_user
+      MYSQL_PASSWORD: library_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./migrations:/docker-entrypoint-initdb.d
+    networks:
+      - library_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: library_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+      MONGO_INITDB_DATABASE: library_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - library_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      timeout: 20s
+      retries: 10
+
+  # gRPC Library Service
+  library-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: library_grpc_service
+    environment:
+      # MySQL Configuration
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: library_user
+      MYSQL_PASSWORD: library_password
+      MYSQL_DATABASE: books
+      
+      # MongoDB Configuration
+      MONGODB_URI: mongodb://root:rootpassword@mongodb:27017/library_db?authSource=admin
+      
+      # Application Configuration
+      PYTHONPATH: /app
+    ports:
+      - "50051:50051"  # gRPC port
+      - "50052:50052"  # Debug port
+    volumes:
+      - .:/app
+      - /app/protogen  # Exclude protogen from volume mount
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - library_network
+    command: >
+      bash -c "
+        echo 'Waiting for databases to be ready...' &&
+        sleep 15 &&
+        echo 'Testing database connections...' &&
+        python repository/database.py &&
+        python test_mongodb_connection.py &&
+        echo 'Starting gRPC server...' &&
+        python main.py
+      "
+
+volumes:
+  mysql_data:
+  mongodb_data:
+
+networks:
+  library_network:
+    driver: bridge

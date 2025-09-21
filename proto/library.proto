@@ -25,6 +25,30 @@ message Book {
   bool checked_out = 6;
 }
 
+enum MembershipType {
+  MEMBERSHIP_TYPE_STUDENT = 0;
+  MEMBERSHIP_TYPE_FACULTY = 1;
+  MEMBERSHIP_TYPE_COMMUNITY = 2;
+  MEMBERSHIP_TYPE_PREMIUM = 3;
+}
+
+message Patron {
+  string id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string email = 4;
+  string phone = 5;
+  string address = 6;
+  MembershipType membership_type = 7;
+  string membership_start_date = 8;  // ISO 8601 format
+  string membership_end_date = 9;    // ISO 8601 format, optional
+  repeated string books_checked_out = 10;
+  uint32 total_books_borrowed = 11;
+  bool active = 12;
+  string created_at = 13;  // ISO 8601 format
+  string updated_at = 14;  // ISO 8601 format
+}
+
 message UpsertBookRequest {
   Book book = 1;
 }
@@ -36,6 +60,17 @@ message UpsertBookResponse {
   }
 }
 
+message UpsertPatronRequest {
+  Patron patron = 1;
+}
+
+message UpsertPatronResponse {
+  oneof id_or_err {
+    string id = 1;
+    Error err = 2;
+  }
+}
+
 message ListBooksRequest {
   uint32 limit = 1;
 }
@@ -43,6 +78,17 @@ message ListBooksRequest {
 message ListBooksResponse {
   // cannot use repeated in oneof so check for books has to be done manually
   repeated Book books = 1;
+  Error err = 2;
+}
+
+message ListPatronsRequest {
+  uint32 limit = 1;
+  uint32 offset = 2;
+  bool active_only = 3;
+}
+
+message ListPatronsResponse {
+  repeated Patron patrons = 1;
   Error err = 2;
 }
 
@@ -61,7 +107,45 @@ message GetBookResponse {
   }
 }
 
+message GetPatronRequest {
+  oneof id_or_email {
+    string id = 1;
+    string email = 2;
+  }
+}
+
+message GetPatronResponse {
+  oneof patron_or_err {
+    Patron patron = 1;
+    Error err = 2;
+  }
+}
+
+message SearchPatronsRequest {
+  string name = 1;
+  uint32 limit = 2;
+}
+
+message SearchPatronsResponse {
+  repeated Patron patrons = 1;
+  Error err = 2;
+}
+
+message PatronMembershipRequest {
+  string patron_id = 1;
+  MembershipType membership_type = 2;
+  string end_date = 3;  // ISO 8601 format, optional
+}
+
+message PatronMembershipResponse {
+  oneof success_or_err {
+    bool success = 1;
+    Error err = 2;
+  }
+}
+
 service Library {
+  // Book operations
   rpc CreateBook (UpsertBookRequest) returns (UpsertBookResponse);
   rpc UpdateBook (UpsertBookRequest) returns (UpsertBookResponse);
   rpc ListBooks (ListBooksRequest) returns (ListBooksResponse);
@@ -71,5 +155,14 @@ service Library {
   // Only need uuid/isbn and will only return uuid/isbn
   rpc CheckoutBook (GetBookRequest) returns (UpsertBookResponse);
   rpc ReturnBook (GetBookRequest) returns (UpsertBookResponse);
+
+  // Patron operations
+  rpc CreatePatron (UpsertPatronRequest) returns (UpsertPatronResponse);
+  rpc UpdatePatron (UpsertPatronRequest) returns (UpsertPatronResponse);
+  rpc ListPatrons (ListPatronsRequest) returns (ListPatronsResponse);
+  rpc GetPatron (GetPatronRequest) returns (GetPatronResponse);
+  rpc DeletePatron (GetPatronRequest) returns (UpsertPatronResponse);
+  rpc SearchPatrons (SearchPatronsRequest) returns (SearchPatronsResponse);
+  rpc UpdatePatronMembership (PatronMembershipRequest) returns (PatronMembershipResponse);
 }
 
